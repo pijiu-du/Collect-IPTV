@@ -1,12 +1,30 @@
-from http.server import SimpleHTTPRequestHandler
-from socketserver import TCPServer
+
 import os
+from pathlib import Path
+from wsgiref.util import FileWrapper
 
-PORT = int(os.environ.get("PORT", 8080))
+BASE_DIR = Path(__file__).resolve().parent
 
-class Handler(SimpleHTTPRequestHandler):
-    pass
+def application(environ, start_response):
+    path = environ.get("PATH_INFO", "/").lstrip("/")
 
-with TCPServer(("0.0.0.0", PORT), Handler) as httpd:
-    print(f"Collect-IPTV server running on port {PORT}")
-    httpd.serve_forever()
+    if not path:
+        path = "index.html"
+
+    target = (BASE_DIR / path).resolve()
+
+    if not target.is_relative_to(BASE_DIR) or not target.is_file():
+        start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8")])
+        return [b"Not Found"]
+
+    content_type = "application/octet-stream"
+    if target.suffix == ".m3u":
+        content_type = "audio/x-mpegurl"
+    elif target.suffix == ".m3u8":
+        content_type = "application/vnd.apple.mpegurl"
+    elif target.suffix == ".txt":
+        content_type = "text/plain; charset=utf-8"
+
+    start_response("200 OK", [("Content-Type", content_type)])
+    return FileWrapper(open(target, "rb"))
+
